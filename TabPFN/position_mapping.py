@@ -58,7 +58,19 @@ def calibrate_k(
     missing = [c for c in needed_cols if c not in solution_df.columns]
     if missing:
         raise ValueError(f"Missing required columns in solution_df: {missing}")
-    clean_solution = solution_df[needed_cols].dropna().copy()
+    # Build mask and align y_pred to solution rows kept
+    mask = solution_df[needed_cols].notna().all(axis=1).values
+    clean_solution = solution_df.loc[mask, needed_cols].copy()
+    y_pred = np.asarray(y_pred).reshape(-1)
+    if len(y_pred) != len(solution_df):
+        # If lengths already differ, align to the shorter length conservatively
+        min_len = min(len(y_pred), len(solution_df))
+        y_pred = y_pred[:min_len]
+        mask = mask[:min_len]
+        clean_solution = clean_solution.iloc[:min_len]
+    # Apply mask to predictions
+    y_pred = y_pred[mask]
+    clean_solution = clean_solution.reset_index(drop=True)
     if len(clean_solution) < 5:
         # Not enough points to compute a stable metric; fallback to k=0
         positions = map_to_positions(y_pred, k=0.0, smoothing_alpha=smoothing_alpha, delta_cap=delta_cap)

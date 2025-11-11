@@ -36,6 +36,8 @@ class FoldSafePreprocessor:
             c for c in df.columns
             if c not in TARGET_COLUMNS and c != "date_id" and pd.api.types.is_numeric_dtype(df[c])
         ]
+        # Drop columns that are entirely NaN in train
+        candidate_cols = [c for c in candidate_cols if df[c].notna().any()]
         self.feature_cols_ = candidate_cols
 
         self.medians_ = {c: float(df[c].median()) for c in candidate_cols}
@@ -58,7 +60,16 @@ class FoldSafePreprocessor:
             df_proc[c] = s
 
         self.means_ = {c: float(df_proc[c].mean()) for c in candidate_cols}
-        self.stds_ = {c: float(df_proc[c].std(ddof=0) + 1e-8) for c in candidate_cols}
+        self.stds_ = {c: float(df_proc[c].std(ddof=0)) for c in candidate_cols}
+        # Filter out zero-variance or NaN-variance features
+        kept_cols = [c for c in candidate_cols if np.isfinite(self.stds_[c]) and self.stds_[c] > 0]
+        # Update internals to kept columns only
+        self.feature_cols_ = kept_cols
+        self.medians_ = {c: self.medians_[c] for c in kept_cols}
+        self.mads_ = {c: self.mads_[c] for c in kept_cols}
+        self.means_ = {c: self.means_[c] for c in kept_cols}
+        # add small epsilon after filtering to avoid div by zero later
+        self.stds_ = {c: float(self.stds_[c] + 1e-8) for c in kept_cols}
         return self
 
     def transform(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
