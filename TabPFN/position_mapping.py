@@ -5,7 +5,7 @@ from typing import Iterable, Tuple
 import numpy as np
 import pandas as pd
 
-from . import metric
+import metric
 
 
 def map_to_positions(
