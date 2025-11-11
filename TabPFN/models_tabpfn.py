@@ -7,11 +7,17 @@ import numpy as np
 try:
     # expects TabPFN to be importable; runner will adjust sys.path if needed
     from tabpfn import TabPFNRegressor  # type: ignore
-except Exception as _e:  # pragma: no cover
+except ImportError as _e:  # pragma: no cover
     TabPFNRegressor = None  # type: ignore[assignment]
     _IMPORT_ERROR = _e
+    _IMPORT_DETAILS = str(_e)
+except Exception as _e:
+    TabPFNRegressor = None  # type: ignore[assignment]
+    _IMPORT_ERROR = _e
+    _IMPORT_DETAILS = f"Unexpected error: {type(_e).__name__}: {_e}"
 else:
     _IMPORT_ERROR = None
+    _IMPORT_DETAILS = None
 
 
 def make_tabpfn_regressor(
@@ -20,7 +26,13 @@ def make_tabpfn_regressor(
 ) -> Optional[object]:
     if TabPFNRegressor is None:
         return None
-    return TabPFNRegressor(n_estimators=n_estimators, random_state=random_state)
+    # Create with minimal settings to avoid potential issues
+    return TabPFNRegressor(
+        n_estimators=n_estimators,
+        random_state=random_state,
+        device="auto",  # Let it auto-detect
+        ignore_pretraining_limits=True,  # Be more permissive
+    )
 
 
 def fit_predict_tabpfn(

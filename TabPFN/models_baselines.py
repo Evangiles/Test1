@@ -20,13 +20,16 @@ def get_sklearn_regressors(random_state: int = 42) -> Dict[str, object]:
         import lightgbm as lgb  # type: ignore
 
         models["lightgbm"] = lgb.LGBMRegressor(
-            n_estimators=500,
-            learning_rate=0.05,
-            max_depth=-1,
+            n_estimators=20,  # Reduced from 500
+            learning_rate=0.3,  # Higher learning rate for shallow trees
+            max_depth=3,  # Limit tree depth to avoid overfitting
+            min_child_samples=20,  # Require more samples per leaf
+            min_split_gain=0.001,  # Require min gain to split
             subsample=0.8,
             colsample_bytree=0.8,
             random_state=random_state,
             n_jobs=-1,
+            verbosity=-1,  # Reduce warnings
         )
     except Exception:
         pass
