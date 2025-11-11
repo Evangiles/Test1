@@ -6,7 +6,8 @@ from typing import List, Dict, Tuple
 import numpy as np
 import pandas as pd
 
-TARGET_COLUMNS = {"forward_returns", "risk_free_rate", "market_forward_excess_returns"}
+# Use a list (stable order) to avoid set-indexing issues in pandas
+TARGET_COLUMNS = ["forward_returns", "risk_free_rate", "market_forward_excess_returns"]
 
 
 def _mad(series: pd.Series) -> float:

@@ -62,8 +62,8 @@ def evaluate_models_with_cv(
             X_train, feat_cols = pre.transform(train)
             X_valid, _ = pre.transform(valid)
 
-            Xtr, ytr = _get_xy(pd.concat([X_train, train[TARGET_COLUMNS]], axis=1), feat_cols, target_col)
-            Xva, yva = _get_xy(pd.concat([X_valid, valid[TARGET_COLUMNS]], axis=1), feat_cols, target_col)
+            Xtr, ytr = _get_xy(pd.concat([X_train, train[list(TARGET_COLUMNS)]], axis=1), feat_cols, target_col)
+            Xva, yva = _get_xy(pd.concat([X_valid, valid[list(TARGET_COLUMNS)]], axis=1), feat_cols, target_col)
 
             # Fit/predict
             try:
@@ -90,8 +90,8 @@ def evaluate_models_with_cv(
             pre = FoldSafePreprocessor().fit(train)
             X_train, feat_cols = pre.transform(train)
             X_valid, _ = pre.transform(valid)
-            Xtr, ytr = _get_xy(pd.concat([X_train, train[TARGET_COLUMNS]], axis=1), feat_cols, target_col)
-            Xva, yva = _get_xy(pd.concat([X_valid, valid[TARGET_COLUMNS]], axis=1), feat_cols, target_col)
+            Xtr, ytr = _get_xy(pd.concat([X_train, train[list(TARGET_COLUMNS)]], axis=1), feat_cols, target_col)
+            Xva, yva = _get_xy(pd.concat([X_valid, valid[list(TARGET_COLUMNS)]], axis=1), feat_cols, target_col)
             try:
                 y_pred = fit_predict_tabpfn(Xtr, ytr, Xva)
             except Exception:
