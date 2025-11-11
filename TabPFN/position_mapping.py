@@ -45,7 +45,7 @@ def calibrate_k(
     solution_df: pd.DataFrame,
     y_pred: np.ndarray,
     *,
-    k_grid: Iterable[float] = (0.2, 0.3, 0.4, 0.5, 0.75, 1.0),
+    k_grid: Iterable[float] = (0.0, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0),
     row_id_column_name: str = "date_id",
     smoothing_alpha: float | None = None,
     delta_cap: float | None = None,
@@ -53,6 +53,21 @@ def calibrate_k(
     """
     Search k over grid to maximize adjusted Sharpe via metric.score, returning (best_k, best_score).
     """
+    # Keep only required columns and drop NaNs to avoid NaN propagation in metric
+    needed_cols = ["forward_returns", "risk_free_rate"]
+    missing = [c for c in needed_cols if c not in solution_df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns in solution_df: {missing}")
+    clean_solution = solution_df[needed_cols].dropna().copy()
+    if len(clean_solution) < 5:
+        # Not enough points to compute a stable metric; fallback to k=0
+        positions = map_to_positions(y_pred, k=0.0, smoothing_alpha=smoothing_alpha, delta_cap=delta_cap)
+        try:
+            score = metric.score(clean_solution, pd.DataFrame({"prediction": positions}), row_id_column_name=row_id_column_name)
+            return 0.0, float(score) if np.isfinite(score) else (-1e9, -1e9)[1]
+        except Exception:
+            return 0.0, -1e9
+
     best_k = None
     best_score = -np.inf
     for k in k_grid:
@@ -60,12 +75,18 @@ def calibrate_k(
             y_pred, k=k, smoothing_alpha=smoothing_alpha, delta_cap=delta_cap
         )
         submission = pd.DataFrame({"prediction": positions})
-        score = metric.score(solution_df.copy(), submission, row_id_column_name=row_id_column_name)
+        try:
+            score = metric.score(clean_solution.copy(), submission, row_id_column_name=row_id_column_name)
+        except Exception:
+            continue
+        if not np.isfinite(score):
+            continue
         if score > best_score:
-            best_score = score
-            best_k = k
+            best_score = float(score)
+            best_k = float(k)
     if best_k is None:
-        raise RuntimeError("Failed to find best k")
+        # Final fallback: use k=0 (benchmark-like) and return very low score to indicate failure
+        return 0.0, -1e9
     return float(best_k), float(best_score)
 
 
