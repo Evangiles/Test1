@@ -44,8 +44,12 @@ def evaluate_models_with_cv(
     bench_scores: List[float] = []
     for _, test_idx in splits:
         valid = df.iloc[test_idx]
-        submission = pd.DataFrame({"prediction": np.clip(np.ones(len(valid)), 0, 2)})
-        score_val = metric.score(valid[["forward_returns", "risk_free_rate"]].copy(), submission, row_id_column_name=date_col)
+        sol = valid[["forward_returns", "risk_free_rate"]].dropna().reset_index(drop=True)
+        if len(sol) == 0:
+            bench_scores.append(float("nan"))
+            continue
+        submission = pd.DataFrame({"prediction": np.clip(np.ones(len(sol)), 0, 2)})
+        score_val = metric.score(sol, submission, row_id_column_name=date_col)
         bench_scores.append(float(score_val))
     results["benchmark_1.0"] = {"fold_scores": bench_scores, "mean_score": float(np.mean(bench_scores))}
 
@@ -101,6 +105,9 @@ def evaluate_models_with_cv(
             fold_scores.append(best_score)
         if len(fold_scores) > 0:
             results[name] = {"fold_scores": fold_scores, "mean_score": float(np.mean(fold_scores))}
+    elif include_tabpfn:
+        # Provide explicit reason when TabPFN is not available
+        results["tabpfn_v2_5"] = {"fold_scores": [], "mean_score": None, "skip_reason": "TabPFN not importable (check sys.path to TabPFN/src and dependencies)"}
 
     return results
 
