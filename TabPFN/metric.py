@@ -42,7 +42,11 @@ def score(solution: pd.DataFrame, submission: pd.DataFrame, row_id_column_name: 
     # Calculate strategy's Sharpe ratio
     strategy_excess_returns = solution['strategy_returns'] - solution['risk_free_rate']
     strategy_excess_cumulative = (1 + strategy_excess_returns).prod()
-    strategy_mean_excess_return = (strategy_excess_cumulative) ** (1 / len(solution)) - 1
+    # Guard against non-positive cumulative product causing NaNs with fractional power
+    if strategy_excess_cumulative <= 0:
+        strategy_mean_excess_return = float(strategy_excess_returns.mean())
+    else:
+        strategy_mean_excess_return = float((strategy_excess_cumulative) ** (1 / len(solution)) - 1)
     strategy_std = solution['strategy_returns'].std()
 
     trading_days_per_yr = 252
@@ -54,7 +58,10 @@ def score(solution: pd.DataFrame, submission: pd.DataFrame, row_id_column_name: 
     # Calculate market return and volatility
     market_excess_returns = solution['forward_returns'] - solution['risk_free_rate']
     market_excess_cumulative = (1 + market_excess_returns).prod()
-    market_mean_excess_return = (market_excess_cumulative) ** (1 / len(solution)) - 1
+    if market_excess_cumulative <= 0:
+        market_mean_excess_return = float(market_excess_returns.mean())
+    else:
+        market_mean_excess_return = float((market_excess_cumulative) ** (1 / len(solution)) - 1)
     market_std = solution['forward_returns'].std()
 
     market_volatility = float(market_std * np.sqrt(trading_days_per_yr) * 100)
