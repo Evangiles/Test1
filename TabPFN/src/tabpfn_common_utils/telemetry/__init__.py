@@ -1,9 +1,10 @@
 # Telemetry stubs for TabPFN
 
-def track_model_call(**kwargs):
+def track_model_call(*call_args, **call_kwargs):
+    """Decorator factory stub for track_model_call."""
     def decorator(func):
-        def wrapper(*args, **fkwargs):
-            return func(*args, **fkwargs)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
