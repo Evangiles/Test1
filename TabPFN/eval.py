@@ -7,10 +7,11 @@ import pandas as pd
 
 from cv import purged_rolling_cv_splits
 from preprocessing_utils import FoldSafePreprocessor, TARGET_COLUMNS
-from position_mapping import calibrate_k
+from position_mapping import calibrate_k, K_GRID_DEFAULT, K_GRID_TABPFN
 import metric
 from models_baselines import get_sklearn_regressors
 from models_tabpfn import fit_predict_tabpfn, make_tabpfn_regressor
+from models_ensemble import fit_predict_weighted_ensemble
 
 
 def _get_xy(df: pd.DataFrame, feature_cols: List[str], target_col: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -77,14 +78,14 @@ def evaluate_models_with_cv(
                 # Skip fold if model fails
                 continue
 
-            # Calibrate k and score
+            # Calibrate k and score (use default k_grid for baselines)
             solution = valid[["forward_returns", "risk_free_rate"]].copy()
-            best_k, best_score = calibrate_k(solution, y_pred, row_id_column_name=date_col)
+            best_k, best_score = calibrate_k(solution, y_pred, k_grid=K_GRID_DEFAULT, row_id_column_name=date_col)
             fold_scores.append(best_score)
         if len(fold_scores) > 0:
             results[name] = {"fold_scores": fold_scores, "mean_score": float(np.mean(fold_scores))}
 
-    # TabPFN regressor
+    # TabPFN regressor (with wider k_grid)
     if include_tabpfn and make_tabpfn_regressor() is not None:
         name = "tabpfn_v2_5"
         fold_scores = []
@@ -101,13 +102,66 @@ def evaluate_models_with_cv(
             except Exception:
                 continue
             solution = valid[["forward_returns", "risk_free_rate"]].copy()
-            best_k, best_score = calibrate_k(solution, y_pred, row_id_column_name=date_col)
+            # Use wider k_grid for TabPFN
+            best_k, best_score = calibrate_k(solution, y_pred, k_grid=K_GRID_TABPFN, row_id_column_name=date_col)
             fold_scores.append(best_score)
         if len(fold_scores) > 0:
             results[name] = {"fold_scores": fold_scores, "mean_score": float(np.mean(fold_scores))}
     elif include_tabpfn:
         # Provide explicit reason when TabPFN is not available
         results["tabpfn_v2_5"] = {"fold_scores": [], "mean_score": None, "skip_reason": "TabPFN not importable (check sys.path to TabPFN/src and dependencies)"}
+
+    # Ensemble: LightGBM + CatBoost + TabPFN (if all available)
+    if "lightgbm" in results and "catboost" in results and "tabpfn_v2_5" in results:
+        if (results["lightgbm"].get("mean_score") is not None and 
+            results["catboost"].get("mean_score") is not None and 
+            results["tabpfn_v2_5"].get("mean_score") is not None):
+            
+            name = "ensemble_lgb_cat_tabpfn"
+            fold_scores = []
+            
+            for fold_idx, (train_idx, test_idx) in enumerate(splits):
+                train = df.iloc[train_idx].copy()
+                valid = df.iloc[test_idx].copy()
+                pre = FoldSafePreprocessor().fit(train)
+                X_train, feat_cols = pre.transform(train)
+                X_valid, _ = pre.transform(valid)
+                Xtr, ytr = _get_xy(pd.concat([X_train, train[list(TARGET_COLUMNS)]], axis=1), feat_cols, target_col)
+                Xva, yva = _get_xy(pd.concat([X_valid, valid[list(TARGET_COLUMNS)]], axis=1), feat_cols, target_col)
+                
+                # Get predictions from all three models
+                preds = {}
+                try:
+                    # LightGBM
+                    lgb_models = get_sklearn_regressors(random_state)
+                    if "lightgbm" in lgb_models:
+                        lgb_models["lightgbm"].fit(Xtr, ytr)
+                        preds["lightgbm"] = lgb_models["lightgbm"].predict(Xva).reshape(-1)
+                    
+                    # CatBoost
+                    cat_models = get_sklearn_regressors(random_state)
+                    if "catboost" in cat_models:
+                        cat_models["catboost"].fit(Xtr, ytr)
+                        preds["catboost"] = cat_models["catboost"].predict(Xva).reshape(-1)
+                    
+                    # TabPFN
+                    preds["tabpfn"] = fit_predict_tabpfn(Xtr, ytr, Xva)
+                    
+                    if len(preds) == 3:
+                        # Optimize ensemble weights on this fold
+                        solution = valid[["forward_returns", "risk_free_rate"]].copy()
+                        ensemble_pred, optimal_weights = fit_predict_weighted_ensemble(
+                            preds, solution, weights=None, row_id_column_name=date_col
+                        )
+                        
+                        # Score ensemble
+                        best_k, best_score = calibrate_k(solution, ensemble_pred, k_grid=K_GRID_DEFAULT, row_id_column_name=date_col)
+                        fold_scores.append(best_score)
+                except Exception:
+                    continue
+            
+            if len(fold_scores) > 0:
+                results[name] = {"fold_scores": fold_scores, "mean_score": float(np.mean(fold_scores))}
 
     return results
 

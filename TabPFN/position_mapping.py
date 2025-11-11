@@ -8,6 +8,12 @@ import pandas as pd
 import metric
 
 
+# Model-specific k grids
+K_GRID_DEFAULT = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5, 1.8, 2.0]
+K_GRID_TABPFN = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 2.5, 3.0]  # Wider range for TabPFN
+K_GRID_CONSERVATIVE = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]  # For benchmark/linear
+
+
 def map_to_positions(
     y_pred: np.ndarray,
     *,
@@ -45,7 +51,7 @@ def calibrate_k(
     solution_df: pd.DataFrame,
     y_pred: np.ndarray,
     *,
-    k_grid: Iterable[float] = (0.0, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0),
+    k_grid: Iterable[float] = None,
     row_id_column_name: str = "date_id",
     smoothing_alpha: float | None = None,
     delta_cap: float | None = None,
@@ -53,6 +59,10 @@ def calibrate_k(
     """
     Search k over grid to maximize adjusted Sharpe via metric.score, returning (best_k, best_score).
     """
+    # Default k_grid: use expanded default range
+    if k_grid is None:
+        k_grid = K_GRID_DEFAULT
+    
     # Keep only required columns and drop NaNs to avoid NaN propagation in metric
     needed_cols = ["forward_returns", "risk_free_rate"]
     missing = [c for c in needed_cols if c not in solution_df.columns]
